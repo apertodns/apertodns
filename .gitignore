@@ -1,0 +1,7 @@
+node_modules/
+.data/
+*.log
+last_ip.txt
+config.json
+.update-check
+.DS_Store
