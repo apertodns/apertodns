@@ -98,6 +98,7 @@ apertodns --force
 | `--add-domain <name>` | Create a new subdomain |
 | `--delete-domain` | Delete a domain (interactive) |
 | `--test <domain>` | Test DNS resolution |
+| `update <domain>` | Update a specific domain's IP (use with `--api-key`) |
 
 ### Token Management
 
@@ -182,7 +183,7 @@ apertodns --domains --json
 apertodns --my-ip --json
 
 # Combine with API key for scripting
-apertodns --api-key ak_xxx... --domains --json
+apertodns --api-key apertodns_live_xxx... --domains --json
 ```
 
 ## Daemon Mode
@@ -350,7 +351,7 @@ apertodns --add-domain newserver.apertodns.com
 apertodns --domains --json
 
 # Use API key for automation
-APERTODNS_API_KEY=ak_xxx... apertodns --domains --json
+APERTODNS_API_KEY=apertodns_live_xxx... apertodns --domains --json
 ```
 
 ## Links
