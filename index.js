@@ -141,6 +141,16 @@ if (isCron) {
   process.argv.push("--json");
 }
 
+// Subcommand detection (new style: domains list, update domain.com, etc.)
+const subcommand = args[0] && !args[0].startsWith('-') ? args[0] : null;
+const subcommandArg = args[1] && !args[1].startsWith('-') ? args[1] : null;
+
+// Helper to get option value from args (works anywhere in args array)
+const getOption = (name) => {
+  const idx = args.indexOf(name);
+  return idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('-') ? args[idx + 1] : null;
+};
+
 const isQuiet = args.includes("--quiet");
 const showHelp = args.includes("--help") || args.includes("-h");
 const showVersion = args.includes("--version") || args.includes("-v");
@@ -149,29 +159,30 @@ const runVerify = args.includes("--verify");
 const runSetup = args.includes("--setup");
 const showStatus = args.includes("--status") || args.includes("--show");
 const forceUpdate = args.includes("--force");
-const enableTokenId = args.includes("--enable") ? args[args.indexOf("--enable") + 1] : null;
-const disableTokenId = args.includes("--disable") ? args[args.indexOf("--disable") + 1] : null;
-const toggleTokenId = args.includes("--toggle") ? args[args.indexOf("--toggle") + 1] : null;
+const enableTokenId = getOption("--enable");
+const disableTokenId = getOption("--disable");
+const toggleTokenId = getOption("--toggle");
 const runConfigEdit = args.includes("--config");
-const listDomains = args.includes("--domains");
-const listTokens = args.includes("--tokens");
-const addDomainArg = args.includes("--add-domain") ? args[args.indexOf("--add-domain") + 1] : null;
-const deleteDomainArg = args.includes("--delete-domain") ? args[args.indexOf("--delete-domain") + 1] : null;
-const showStats = args.includes("--stats");
-const showLogs = args.includes("--logs");
-const testDns = args.includes("--test") ? args[args.indexOf("--test") + 1] : null;
-const showDashboard = args.includes("--dashboard");
-const listWebhooks = args.includes("--webhooks");
-const listApiKeys = args.includes("--api-keys");
-const createApiKeyArg = args.includes("--create-api-key") ? args[args.indexOf("--create-api-key") + 1] : null;
-const deleteApiKeyArg = args.includes("--delete-api-key") ? args[args.indexOf("--delete-api-key") + 1] : null;
-const showScopes = args.includes("--scopes");
-const useApiKey = args.includes("--api-key") ? args[args.indexOf("--api-key") + 1] : null;
+const listDomains = args.includes("--domains") || (subcommand === "domains" && (!subcommandArg || subcommandArg === "list"));
+const listTokens = args.includes("--tokens") || (subcommand === "tokens" && (!subcommandArg || subcommandArg === "list"));
+const addDomainArg = getOption("--add-domain") || (subcommand === "domains" && subcommandArg === "add" ? args[2] : null);
+const deleteDomainArg = getOption("--delete-domain") || (subcommand === "domains" && subcommandArg === "delete" ? args[2] : null);
+const showStats = args.includes("--stats") || subcommand === "stats";
+const showLogs = args.includes("--logs") || subcommand === "logs";
+const testDns = getOption("--test") || (subcommand === "test" ? subcommandArg : null);
+const showDashboard = args.includes("--dashboard") || subcommand === "dashboard";
+const listWebhooks = args.includes("--webhooks") || subcommand === "webhooks";
+const listApiKeys = args.includes("--api-keys") || (subcommand === "api-keys" && (!subcommandArg || subcommandArg === "list"));
+const createApiKeyArg = getOption("--create-api-key") || (subcommand === "api-keys" && subcommandArg === "create" ? args[2] : null);
+const deleteApiKeyArg = getOption("--delete-api-key") || (subcommand === "api-keys" && subcommandArg === "delete" ? args[2] : null);
+const showScopes = args.includes("--scopes") || subcommand === "scopes";
+const useApiKey = getOption("--api-key");
+const updateDomainArg = subcommand === "update" ? subcommandArg : null;
 const runInteractive = args.length === 0;
-const runDaemon = args.includes("--daemon");
-const daemonInterval = args.includes("--interval") ? parseInt(args[args.indexOf("--interval") + 1]) : 300;
-const showMyIp = args.includes("--my-ip") || args.includes("--ip");
-const logout = args.includes("--logout");
+const runDaemon = args.includes("--daemon") || subcommand === "daemon";
+const daemonInterval = getOption("--interval") ? parseInt(getOption("--interval")) : 300;
+const showMyIp = args.includes("--my-ip") || args.includes("--ip") || subcommand === "ip" || subcommand === "my-ip";
+const logout = args.includes("--logout") || subcommand === "logout";
 
 // JSON output helper
 const jsonOutput = (data) => {
@@ -1534,6 +1545,96 @@ const runUpdate = async () => {
   }
 };
 
+// ==================== UPDATE SINGLE DOMAIN ====================
+
+const updateSingleDomain = async (domainName) => {
+  const token = await getAuthToken();
+  const spin = !showJson ? spinner(`Rilevamento IP per ${domainName}...`).start() : null;
+
+  try {
+    // Get current IP
+    const currentIP = await getCurrentIP('https://api.ipify.org').catch(() => null);
+    const currentIPv6 = await getCurrentIPv6('https://api6.ipify.org').catch(() => null);
+
+    if (!currentIP && !currentIPv6) {
+      spin?.fail("Nessun IP rilevato");
+      if (showJson) {
+        console.log(JSON.stringify({ error: "Nessun IP rilevato" }));
+      }
+      return;
+    }
+
+    if (spin) spin.text = `Ricerca dominio ${domainName}...`;
+
+    // First, get domain list to find the domain ID
+    const listRes = await fetch(`${API_BASE}/domains`, {
+      headers: getAuthHeaders(token)
+    });
+
+    if (!listRes.ok) {
+      const errData = await listRes.json().catch(() => ({}));
+      spin?.fail(`Errore autenticazione: ${errData.error || errData.message || 'Token non valido'}`);
+      if (showJson) {
+        console.log(JSON.stringify({ error: errData.error || errData.message || 'Autenticazione fallita' }));
+      }
+      return;
+    }
+
+    const listData = await listRes.json();
+    const domains = listData.domains || listData;
+    const domain = domains.find(d => d.name === domainName || d.name.toLowerCase() === domainName.toLowerCase());
+
+    if (!domain) {
+      spin?.fail(`Dominio "${domainName}" non trovato nel tuo account`);
+      if (showJson) {
+        console.log(JSON.stringify({ error: `Dominio "${domainName}" non trovato` }));
+      }
+      return;
+    }
+
+    if (spin) spin.text = `Aggiornamento DNS per ${domainName}...`;
+
+    // Use PATCH /domains/:id to update (supports API Key)
+    const updateBody = { ip: currentIP };
+    if (currentIPv6) updateBody.ipv6 = currentIPv6;
+
+    const res = await fetch(`${API_BASE}/domains/${domain.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(token)
+      },
+      body: JSON.stringify(updateBody)
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      spin?.succeed(`DNS aggiornato! ${domainName} → ${currentIP}`);
+      if (showJson) {
+        console.log(JSON.stringify({
+          success: true,
+          domain: domainName,
+          ip: currentIP,
+          ipv6: currentIPv6 || null,
+          previousIp: domain.ip,
+          result: data
+        }, null, 2));
+      }
+    } else {
+      spin?.fail(`Errore: ${data.error || data.details || data.message}`);
+      if (showJson) {
+        console.log(JSON.stringify({ error: data.error || data.details || data.message }));
+      }
+    }
+  } catch (err) {
+    spin?.fail(err.message);
+    if (showJson) {
+      console.log(JSON.stringify({ error: err.message }));
+    }
+  }
+};
+
 // ==================== DAEMON MODE ====================
 
 const runDaemonMode = async () => {
@@ -1707,6 +1808,7 @@ const main = async () => {
     else if (listDomains) await showDomainsList();
     else if (addDomainArg) await addDomain(addDomainArg);
     else if (deleteDomainArg) await deleteDomain(deleteDomainArg);
+    else if (updateDomainArg) await updateSingleDomain(updateDomainArg);
     else if (testDns) await testDnsResolution(testDns);
     else if (listTokens) await showTokensList();
     else if (showStats) await showStatsCommand();
