@@ -1,6 +1,6 @@
 {
   "name": "apertodns",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ApertoDNS CLI - Dynamic DNS management from your terminal. Manage domains, tokens, API keys and DNS updates with style.",
   "main": "index.js",
   "type": "module",
