@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/apertodns.svg)](https://www.npmjs.com/package/apertodns)
 [![npm downloads](https://img.shields.io/npm/dm/apertodns.svg)](https://www.npmjs.com/package/apertodns)
-[![license](https://img.shields.io/npm/l/apertodns.svg)](https://github.com/1r0n3d3v3l0per/apertodns/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/apertodns.svg)](https://github.com/apertodns/apertodns/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/apertodns.svg)](https://nodejs.org)
 
 **Dynamic DNS management from your terminal.** Manage domains, tokens, API keys, and DNS updates with style.
@@ -359,12 +359,12 @@ APERTODNS_API_KEY=apertodns_live_xxx... apertodns --domains --json
 - **Website**: [apertodns.com](https://apertodns.com)
 - **Dashboard**: [apertodns.com/dashboard](https://apertodns.com/dashboard)
 - **Documentation**: [apertodns.com/docs](https://apertodns.com/docs)
-- **Issues**: [GitHub Issues](https://github.com/1r0n3d3v3l0per/apertodns/issues)
+- **Issues**: [GitHub Issues](https://github.com/apertodns/apertodns/issues)
 
 ## Support
 
 Need help?
-- Open an issue on [GitHub](https://github.com/1r0n3d3v3l0per/apertodns/issues)
+- Open an issue on [GitHub](https://github.com/apertodns/apertodns/issues)
 - Email: support@apertodns.com
 
 ## License
