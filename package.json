@@ -1,6 +1,6 @@
 {
   "name": "apertodns",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "ApertoDNS CLI - Dynamic DNS management from your terminal. Manage domains, tokens, API keys and DNS updates with style.",
   "main": "index.js",
   "type": "module",
@@ -30,15 +30,15 @@
     "qnap",
     "router"
   ],
-  "author": "Aperto Network <info@apertodns.com>",
+  "author": "Andrea Ferro <support@apertodns.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/1r0n3d3v3l0per/apertodns.git"
+    "url": "https://github.com/apertodns/apertodns.git"
   },
   "homepage": "https://apertodns.com",
   "bugs": {
-    "url": "https://github.com/1r0n3d3v3l0per/apertodns/issues"
+    "url": "https://github.com/apertodns/apertodns/issues"
   },
   "engines": {
     "node": ">=18.0.0"
