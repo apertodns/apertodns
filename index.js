@@ -194,7 +194,8 @@ const txtSetArgs = txtSetIdx !== -1 ? {
 const txtDeleteIdx = args.indexOf("--txt-delete");
 const txtDeleteArgs = txtDeleteIdx !== -1 ? {
   hostname: args[txtDeleteIdx + 1],
-  name: args[txtDeleteIdx + 2]
+  name: args[txtDeleteIdx + 2],
+  value: args[txtDeleteIdx + 3]  // Optional: for selective multi-TXT deletion (wildcard certificates)
 } : null;
 
 // JSON output helper
@@ -229,7 +230,7 @@ ${chalk.bold("GESTIONE DOMINI:")}
 
 ${chalk.bold("TXT RECORDS (ACME DNS-01):")}
   ${cyan("--txt-set")} <host> <name> <val>   Imposta record TXT
-  ${cyan("--txt-delete")} <host> <name>      Elimina record TXT
+  ${cyan("--txt-delete")} <host> <name> [val] Elimina record TXT (val opzionale per wildcard)
 
 ${chalk.bold("GESTIONE TOKEN:")}
   ${cyan("--enable")} <id>        Attiva un token
@@ -724,23 +725,28 @@ const setTxtRecord = async (hostname, name, value) => {
   }
 };
 
-const deleteTxtRecord = async (hostname, name) => {
+const deleteTxtRecord = async (hostname, name, value) => {
   if (!hostname || !name) {
     if (showJson) {
-      console.log(JSON.stringify({ error: "Uso: --txt-delete <hostname> <name>" }));
+      console.log(JSON.stringify({ error: "Uso: --txt-delete <hostname> <name> [value]" }));
     } else {
-      console.log(red("\n❌ Uso: --txt-delete <hostname> <name>"));
-      console.log(gray("   Esempio: --txt-delete mio.apertodns.com _acme-challenge\n"));
+      console.log(red("\n❌ Uso: --txt-delete <hostname> <name> [value]"));
+      console.log(gray("   Esempio: --txt-delete mio.apertodns.com _acme-challenge"));
+      console.log(gray("   Con value: --txt-delete mio.apertodns.com _acme-challenge token123\n"));
     }
     return;
   }
 
   const token = await getAuthToken();
-  const spin = !showJson ? spinner(`Eliminazione TXT ${name}.${hostname}...`).start() : null;
+  const spin = !showJson ? spinner(`Eliminazione TXT ${name}.${hostname}${value ? ` (value: ${value.substring(0,10)}...)` : ''}...`).start() : null;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
+
+    // Build txt object - include value if provided for selective multi-TXT deletion
+    const txtObj = { name, action: "delete" };
+    if (value) txtObj.value = value;
 
     const res = await fetch(`${IETF_BASE}/update`, {
       method: "POST",
@@ -750,10 +756,7 @@ const deleteTxtRecord = async (hostname, name) => {
       },
       body: JSON.stringify({
         hostname,
-        txt: {
-          name,
-          action: "delete"
-        }
+        txt: txtObj
       }),
       signal: controller.signal
     });
@@ -762,9 +765,9 @@ const deleteTxtRecord = async (hostname, name) => {
     const data = await res.json();
 
     if (res.ok && data.success !== false) {
-      spin?.succeed(`TXT record eliminato: ${name}.${hostname}`);
+      spin?.succeed(`TXT record eliminato: ${name}.${hostname}${value ? ' (selective)' : ''}`);
       if (showJson) {
-        console.log(JSON.stringify({ success: true, hostname, txt: { name, action: "delete" }, response: data }, null, 2));
+        console.log(JSON.stringify({ success: true, hostname, txt: { name, value: value || undefined, action: "delete" }, response: data }, null, 2));
       }
     } else {
       spin?.fail(`Errore: ${data.error || data.message || 'TXT non supportato'}`);
@@ -1944,7 +1947,7 @@ const main = async () => {
   try {
     if (logout) await runLogout();
     else if (txtSetArgs) await setTxtRecord(txtSetArgs.hostname, txtSetArgs.name, txtSetArgs.value);
-    else if (txtDeleteArgs) await deleteTxtRecord(txtDeleteArgs.hostname, txtDeleteArgs.name);
+    else if (txtDeleteArgs) await deleteTxtRecord(txtDeleteArgs.hostname, txtDeleteArgs.name, txtDeleteArgs.value);
     else if (showMyIp) await showMyIpCommand();
     else if (runDaemon) await runDaemonMode();
     else if (enableTokenId) await updateTokenState(enableTokenId, true);
