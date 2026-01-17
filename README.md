@@ -100,6 +100,26 @@ apertodns --force
 | `--test <domain>` | Test DNS resolution |
 | `update <domain>` | Update a specific domain's IP (use with `--api-key`) |
 
+### TXT Records (ACME DNS-01)
+
+| Command | Description |
+|---------|-------------|
+| `--txt-set <host> <name> <value>` | Set a TXT record |
+| `--txt-delete <host> <name>` | Delete a TXT record |
+
+Perfect for Let's Encrypt DNS-01 challenges:
+
+```bash
+# Set TXT record for certificate validation
+apertodns --txt-set example.apertodns.com _acme-challenge "validation-token"
+
+# Delete TXT record after certificate issuance
+apertodns --txt-delete example.apertodns.com _acme-challenge
+
+# Use with API key for automation
+apertodns --api-key apertodns_live_xxx... --txt-set example.apertodns.com _acme-challenge "token" --json
+```
+
 ### Token Management
 
 | Command | Description |

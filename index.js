@@ -184,6 +184,19 @@ const daemonInterval = getOption("--interval") ? parseInt(getOption("--interval"
 const showMyIp = args.includes("--my-ip") || args.includes("--ip") || subcommand === "ip" || subcommand === "my-ip";
 const logout = args.includes("--logout") || subcommand === "logout";
 
+// TXT record commands (ACME DNS-01 challenges)
+const txtSetIdx = args.indexOf("--txt-set");
+const txtSetArgs = txtSetIdx !== -1 ? {
+  hostname: args[txtSetIdx + 1],
+  name: args[txtSetIdx + 2],
+  value: args[txtSetIdx + 3]
+} : null;
+const txtDeleteIdx = args.indexOf("--txt-delete");
+const txtDeleteArgs = txtDeleteIdx !== -1 ? {
+  hostname: args[txtDeleteIdx + 1],
+  name: args[txtDeleteIdx + 2]
+} : null;
+
 // JSON output helper
 const jsonOutput = (data) => {
   if (showJson) {
@@ -213,6 +226,10 @@ ${chalk.bold("GESTIONE DOMINI:")}
   ${cyan("--add-domain")} <name>  Crea un nuovo dominio
   ${cyan("--delete-domain")}      Elimina un dominio (interattivo)
   ${cyan("--test")} <domain>      Testa risoluzione DNS di un dominio
+
+${chalk.bold("TXT RECORDS (ACME DNS-01):")}
+  ${cyan("--txt-set")} <host> <name> <val>   Imposta record TXT
+  ${cyan("--txt-delete")} <host> <name>      Elimina record TXT
 
 ${chalk.bold("GESTIONE TOKEN:")}
   ${cyan("--enable")} <id>        Attiva un token
@@ -361,9 +378,15 @@ const fetchDomains = async () => {
   const token = await getAuthToken();
   const spin = !showJson ? spinner("Caricamento domini...").start() : null;
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     const res = await fetch(`${API_BASE}/domains`, {
-      headers: getAuthHeaders(token)
+      headers: getAuthHeaders(token),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
+
     spin?.stop();
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -371,7 +394,7 @@ const fetchDomains = async () => {
     }
     return await res.json();
   } catch (err) {
-    spin?.fail("Errore caricamento domini");
+    spin?.fail(err.name === 'AbortError' ? "Timeout caricamento domini" : "Errore caricamento domini");
     throw err;
   }
 };
@@ -632,6 +655,127 @@ const testDnsResolution = async (domain) => {
       console.log(JSON.stringify({ error: "dig command not available or failed" }));
     } else {
       console.log(gray("   (Assicurati che 'dig' sia installato)\n"));
+    }
+  }
+};
+
+// ==================== TXT RECORDS ====================
+
+const IETF_BASE = "https://api.apertodns.com/.well-known/apertodns/v1";
+
+const setTxtRecord = async (hostname, name, value) => {
+  if (!hostname || !name || !value) {
+    if (showJson) {
+      console.log(JSON.stringify({ error: "Uso: --txt-set <hostname> <name> <value>" }));
+    } else {
+      console.log(red("\n❌ Uso: --txt-set <hostname> <name> <value>"));
+      console.log(gray("   Esempio: --txt-set mio.apertodns.com _acme-challenge abc123\n"));
+    }
+    return;
+  }
+
+  const token = await getAuthToken();
+  const spin = !showJson ? spinner(`Impostazione TXT ${name}.${hostname}...`).start() : null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(`${IETF_BASE}/update`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(token)
+      },
+      body: JSON.stringify({
+        hostname,
+        txt: {
+          name,
+          value,
+          action: "set"
+        }
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const data = await res.json();
+
+    if (res.ok && data.success !== false) {
+      spin?.succeed(`TXT record impostato: ${name}.${hostname}`);
+      if (showJson) {
+        console.log(JSON.stringify({ success: true, hostname, txt: { name, value, action: "set" }, response: data }, null, 2));
+      } else {
+        console.log(gray(`   Nome: ${cyan(name)}`));
+        console.log(gray(`   Valore: ${cyan(value)}`));
+        console.log();
+      }
+    } else {
+      spin?.fail(`Errore: ${data.error || data.message || 'TXT non supportato'}`);
+      if (showJson) {
+        console.log(JSON.stringify({ error: data.error || data.message }));
+      }
+    }
+  } catch (err) {
+    spin?.fail(err.name === 'AbortError' ? "Timeout" : err.message);
+    if (showJson) {
+      console.log(JSON.stringify({ error: err.message }));
+    }
+  }
+};
+
+const deleteTxtRecord = async (hostname, name) => {
+  if (!hostname || !name) {
+    if (showJson) {
+      console.log(JSON.stringify({ error: "Uso: --txt-delete <hostname> <name>" }));
+    } else {
+      console.log(red("\n❌ Uso: --txt-delete <hostname> <name>"));
+      console.log(gray("   Esempio: --txt-delete mio.apertodns.com _acme-challenge\n"));
+    }
+    return;
+  }
+
+  const token = await getAuthToken();
+  const spin = !showJson ? spinner(`Eliminazione TXT ${name}.${hostname}...`).start() : null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(`${IETF_BASE}/update`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(token)
+      },
+      body: JSON.stringify({
+        hostname,
+        txt: {
+          name,
+          action: "delete"
+        }
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const data = await res.json();
+
+    if (res.ok && data.success !== false) {
+      spin?.succeed(`TXT record eliminato: ${name}.${hostname}`);
+      if (showJson) {
+        console.log(JSON.stringify({ success: true, hostname, txt: { name, action: "delete" }, response: data }, null, 2));
+      }
+    } else {
+      spin?.fail(`Errore: ${data.error || data.message || 'TXT non supportato'}`);
+      if (showJson) {
+        console.log(JSON.stringify({ error: data.error || data.message }));
+      }
+    }
+  } catch (err) {
+    spin?.fail(err.name === 'AbortError' ? "Timeout" : err.message);
+    if (showJson) {
+      console.log(JSON.stringify({ error: err.message }));
     }
   }
 };
@@ -1799,6 +1943,8 @@ const interactiveMode = async () => {
 const main = async () => {
   try {
     if (logout) await runLogout();
+    else if (txtSetArgs) await setTxtRecord(txtSetArgs.hostname, txtSetArgs.name, txtSetArgs.value);
+    else if (txtDeleteArgs) await deleteTxtRecord(txtDeleteArgs.hostname, txtDeleteArgs.name);
     else if (showMyIp) await showMyIpCommand();
     else if (runDaemon) await runDaemonMode();
     else if (enableTokenId) await updateTokenState(enableTokenId, true);
